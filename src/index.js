@@ -1,8 +1,10 @@
 import THREE from "./lib/three";
 import "./style/index.styl";
 import "./utils/utils";
+import each from 'lodash/each'
 import mouse, {MOVE, UP, DOWN, WHEEL} from "./classes/Mouse";
 import carPromise from "./classes/DriftCar";
+import AniamtionManager, {Animation, Keyframe, UPDATE_VECTOR3} from './classes/animationManager/AnimationManager';
 
 const {PI} = Math;
 
@@ -12,8 +14,9 @@ const scene = new THREE.Scene();
 const aLight = new THREE.AmbientLight(0xffffff, 1);
 const pLight = new THREE.SpotLight(0xffffff, 1, 10000, 1);
 
+const animationManager = new AniamtionManager();
 
-var axisHelper = new THREE.AxisHelper( 5000 );
+const axisHelper = new THREE.AxisHelper( 5000 );
 scene.add( axisHelper );
 
 let previousTimestamp = 0;
@@ -25,7 +28,7 @@ document.body.appendChild(renderer.domElement);
 pLight.position.y = 1000;
 pLight.position.x = 2000;
 pLight.castShadow = true;
-scene.add(pLight);
+//scene.add(pLight);
 scene.add(aLight);
 
 const cubemapImages = [
@@ -69,6 +72,24 @@ carPromise.then(driftCar => {
         }
     });
 
+    let amount = 0;
+
+    each(car.mesh.children, child => {
+        if (child.geometry) {
+            amount += child.geometry.attributes.normal.length / 3;
+        }
+    });
+
+    console.log(amount);
+
+
+    animateCar(car.mesh);
+    for (let i = 0; i < 20; i++) {
+        const newCar = car.mesh.clone();
+        scene.add(newCar);
+        animateCar(newCar);
+    }
+
     mouse.subscribe(MOVE, rotate);
 
     mouse.subscribe(UP, () => {
@@ -103,6 +124,68 @@ let theta = -1.23,
 let mouseDown = false,
     radius = 1500;
 
+function animateCar(mesh) {
+
+    const randomRange = 30000;
+
+    const x = Math.random() * randomRange - randomRange / 2;
+    const z = Math.random() * randomRange - randomRange / 2;
+    const newPosition = new THREE.Vector3(x, mesh.position.y, z);
+    const lengthVector = mesh.position.clone().sub(newPosition);
+    const length = lengthVector.length();
+    const speed = 1;
+
+    rotateCar(mesh, lengthVector, newPosition);
+}
+
+function moveCar(mesh, lengthVector, newPosition) {
+    const speed = 1;
+
+    animationManager.animate(new Animation({
+        target: mesh,
+        keyframes: [
+            new Keyframe({
+                position: mesh.position.clone()
+            }),
+            new Keyframe({
+                position: newPosition
+            })
+        ],
+        updateFunctions: {
+            position: UPDATE_VECTOR3
+        },
+        duration: lengthVector.length() / speed,
+        onEnd: animateCar.bind(null, mesh)
+    }));
+}
+
+function rotateCar(mesh, lengthVector, newPosition) {
+    let angle = Math.atan(lengthVector.x / lengthVector.z);
+    angle = (lengthVector.z > 0) ? angle + Math.PI / 2 : angle + Math.PI / 2 * 3;
+    angle %= Math.PI * 2;
+
+    const newRotation = new THREE.Vector3(mesh.rotation.x, angle, mesh.rotation.z);
+    const rotationVector = mesh.rotation.clone();
+    rotationVector.y -= angle;
+    const speed = 0.001;
+
+    animationManager.animate(new Animation({
+        target: mesh,
+        keyframes: [
+            new Keyframe({
+                rotation: mesh.rotation.clone()
+            }),
+            new Keyframe({
+                rotation: newRotation
+            })
+        ],
+        updateFunctions: {
+            rotation: UPDATE_VECTOR3
+        },
+        duration: Math.abs(rotationVector.y) / speed,
+        onEnd: moveCar.bind(null, mesh, lengthVector, newPosition)
+    }));
+}
 
 
 
@@ -113,7 +196,6 @@ function rotate({delta: {x, y}}) {
         theta += y / 500;
         phi += x / 500;
     }
-
 
     // Subtract deltaTheta and deltaPhi
     //theta = Math.min(Math.max(theta - deltaTheta, 0), Math.PI);
@@ -132,10 +214,13 @@ function rotate({delta: {x, y}}) {
     camera.lookAt(car.mesh.position);
 }
 
-
 function render(timestamp) {
     const delta = timestamp - previousTimestamp;
     previousTimestamp = timestamp;
+
+    animationManager.update(delta);
+
+    console.log(1000 / delta);
 
 
     //const {W, S, LEFT, RIGHT, UP, DOWN} = keyboard.state;
@@ -151,7 +236,7 @@ function render(timestamp) {
     requestAnimationFrame(render);
      //car.mesh.rotation.y += 0.005;
      //car.mesh.position.z -= 0.2;
-    car.update(delta);
+    //car.update(delta);
 
     // camera.rotation.copy(car.mesh.rotation);
     // camera.position.set(

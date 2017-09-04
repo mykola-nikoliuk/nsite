@@ -21,5 +21,9 @@
     "stylus-loader": "^3.0.1",
     "three": "^0.85.2",
     "webpack": "^2.6.1"
+  },
+  "dependencies": {
+    "lodash": "^4.17.4",
+    "three": "^0.85.2"
   }
 }
